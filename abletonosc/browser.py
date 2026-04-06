@@ -186,6 +186,25 @@ class BrowserHandler(AbletonOSCHandler):
         self.song.view.selected_track = track
         return track
 
+    def _find_item_with_fallback(self, name, category_name=None):
+        """Find item in specified category, falling back to user_folders (Places)."""
+        if category_name:
+            category = self._get_category(category_name)
+            if category:
+                item = self._find_item(category, name)
+                if item:
+                    return item
+
+        # Fallback: search Places (user folders)
+        try:
+            for folder in self.browser.user_folders:
+                item = self._find_item(folder, name)
+                if item:
+                    return item
+        except Exception:
+            pass
+        return None
+
     def _load_from_categories(self, name, track_index, category_names):
         """Search for and load an item by name across multiple categories."""
         self._select_track(track_index)
@@ -199,7 +218,18 @@ class BrowserHandler(AbletonOSCHandler):
                     logger.info("Loaded '%s' from %s onto track %d" % (item.name, cat_name, track_index))
                     return (item.name,)
 
-        raise ValueError("Not found: %s (searched: %s)" % (name, ", ".join(category_names)))
+        # Fallback: search Places (user folders)
+        try:
+            for folder in self.browser.user_folders:
+                item = self._find_item(folder, name)
+                if item:
+                    self.browser.load_item(item)
+                    logger.info("Loaded '%s' from user folder onto track %d" % (item.name, track_index))
+                    return (item.name,)
+        except Exception:
+            pass
+
+        raise ValueError("Not found: %s (searched: %s + user folders)" % (name, ", ".join(category_names)))
 
     def _refresh(self):
         """Force browser cache invalidation by toggling filter_type."""
@@ -288,7 +318,9 @@ class BrowserHandler(AbletonOSCHandler):
 
             item = self._find_item(category, name)
             if not item:
-                raise ValueError("Not found in %s: %s" % (category_name, name))
+                item = self._find_item_with_fallback(name)
+            if not item:
+                raise ValueError("Not found in %s or user folders: %s" % (category_name, name))
 
             app = Live.Application.get_application()
             track = self.song.tracks[track_index]
@@ -326,7 +358,9 @@ class BrowserHandler(AbletonOSCHandler):
 
             item = self._find_item(category, name)
             if not item:
-                raise ValueError("Not found in %s: %s" % (category_name, name))
+                item = self._find_item_with_fallback(name)
+            if not item:
+                raise ValueError("Not found in %s or user folders: %s" % (category_name, name))
 
             app = Live.Application.get_application()
             track = self.song.tracks[track_index]
