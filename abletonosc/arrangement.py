@@ -15,51 +15,51 @@ class ArrangementHandler(AbletonOSCHandler):
         def create_midi_clip(params: Tuple[Any]):
             """
             Create an empty MIDI clip in the arrangement view.
-            /live/arrangement/create_midi_clip (track_index, start_time, length)
+            /live/arrangement/create_midi_clip (track, start_time, length)
             Requires Live 12.2+
             """
-            track_index = int(params[0])
+            track, track_id = self._resolve_track(params[0])
             start_time = float(params[1])
             length = float(params[2])
 
-            track = self.song.tracks[track_index]
             track.create_midi_clip(start_time, length)
 
-            logger.info("Created arrangement MIDI clip on track %d at beat %.1f, length %.1f" %
-                        (track_index, start_time, length))
-            return (track_index, start_time, length)
+            logger.info("Created arrangement MIDI clip on track %s at beat %.1f, length %.1f" %
+                        (track_id, start_time, length))
+            return (track_id, start_time, length)
 
         def duplicate_to_arrangement(params: Tuple[Any]):
             """
             Copy a session clip to the arrangement at a specific beat position.
-            /live/arrangement/duplicate_to_arrangement (track_index, clip_slot_index, destination_time)
+            /live/arrangement/duplicate_to_arrangement (track, clip_slot_index, destination_time)
             """
-            track_index = int(params[0])
+            track, track_id = self._resolve_track(params[0])
             clip_slot_index = int(params[1])
             destination_time = float(params[2])
 
-            track = self.song.tracks[track_index]
+            if not hasattr(track, 'clip_slots'):
+                raise ValueError("Track %s has no clip slots" % track_id)
+
             clip_slot = track.clip_slots[clip_slot_index]
 
             if not clip_slot.has_clip:
-                raise ValueError("No clip in slot %d on track %d" % (clip_slot_index, track_index))
+                raise ValueError("No clip in slot %d on track %s" % (clip_slot_index, track_id))
 
             clip = clip_slot.clip
             track.duplicate_clip_to_arrangement(clip, destination_time)
 
-            logger.info("Duplicated session clip (track %d, slot %d) to arrangement at beat %.1f" %
-                        (track_index, clip_slot_index, destination_time))
-            return (track_index, clip_slot_index, destination_time)
+            logger.info("Duplicated session clip (track %s, slot %d) to arrangement at beat %.1f" %
+                        (track_id, clip_slot_index, destination_time))
+            return (track_id, clip_slot_index, destination_time)
 
         def delete_clip(params: Tuple[Any]):
             """
             Delete an arrangement clip.
-            /live/arrangement/delete_clip (track_index, clip_index)
+            /live/arrangement/delete_clip (track, clip_index)
             """
-            track_index = int(params[0])
+            track, track_id = self._resolve_track(params[0])
             clip_index = int(params[1])
 
-            track = self.song.tracks[track_index]
             clips = track.arrangement_clips
 
             if clip_index >= len(clips):
@@ -69,20 +69,19 @@ class ArrangementHandler(AbletonOSCHandler):
             clip = clips[clip_index]
             track.delete_clip(clip)
 
-            logger.info("Deleted arrangement clip %d on track %d" % (clip_index, track_index))
-            return (track_index, clip_index)
+            logger.info("Deleted arrangement clip %d on track %s" % (clip_index, track_id))
+            return (track_id, clip_index)
 
         def get_clips(params: Tuple[Any]):
             """
             List arrangement clips for a track.
-            /live/arrangement/get/clips (track_index)
-            Returns: (track_index, name, start_time, length, is_midi, ...)
+            /live/arrangement/get/clips (track)
+            Returns: (track_id, name, start_time, length, is_midi, ...)
             """
-            track_index = int(params[0])
-            track = self.song.tracks[track_index]
+            track, track_id = self._resolve_track(params[0])
             clips = track.arrangement_clips
 
-            result = [track_index]
+            result = [track_id]
             for clip in clips:
                 try:
                     result.append(clip.name)
@@ -98,11 +97,10 @@ class ArrangementHandler(AbletonOSCHandler):
         def get_notes(params: Tuple[Any]):
             """
             Get MIDI notes from an arrangement clip.
-            /live/arrangement/get/notes (track_index, clip_index, [start_pitch, pitch_span, start_time, time_span])
+            /live/arrangement/get/notes (track, clip_index, [start_pitch, pitch_span, start_time, time_span])
             """
-            track_index = int(params[0])
+            track, track_id = self._resolve_track(params[0])
             clip_index = int(params[1])
-            track = self.song.tracks[track_index]
             clips = track.arrangement_clips
 
             if clip_index >= len(clips):
@@ -125,7 +123,7 @@ class ArrangementHandler(AbletonOSCHandler):
 
             notes = clip.get_notes_extended(from_pitch, pitch_span, from_time, time_span)
 
-            result = [track_index, clip_index]
+            result = [track_id, clip_index]
             for note in notes:
                 result.append(note.pitch)
                 result.append(note.start_time)
@@ -138,11 +136,10 @@ class ArrangementHandler(AbletonOSCHandler):
         def add_notes(params: Tuple[Any]):
             """
             Add MIDI notes to an arrangement clip.
-            /live/arrangement/add/notes (track_index, clip_index, pitch, start, duration, velocity, mute, ...)
+            /live/arrangement/add/notes (track, clip_index, pitch, start, duration, velocity, mute, ...)
             """
-            track_index = int(params[0])
+            track, track_id = self._resolve_track(params[0])
             clip_index = int(params[1])
-            track = self.song.tracks[track_index]
             clips = track.arrangement_clips
 
             if clip_index >= len(clips):
@@ -168,19 +165,18 @@ class ArrangementHandler(AbletonOSCHandler):
 
             if notes:
                 clip.add_new_notes(tuple(notes))
-                logger.info("Added %d notes to arrangement clip %d on track %d" %
-                            (len(notes), clip_index, track_index))
+                logger.info("Added %d notes to arrangement clip %d on track %s" %
+                            (len(notes), clip_index, track_id))
 
-            return (track_index, clip_index, len(notes))
+            return (track_id, clip_index, len(notes))
 
         def remove_notes(params: Tuple[Any]):
             """
             Remove notes from an arrangement clip by range.
-            /live/arrangement/remove/notes (track_index, clip_index, [from_pitch, pitch_span, from_time, time_span])
+            /live/arrangement/remove/notes (track, clip_index, [from_pitch, pitch_span, from_time, time_span])
             """
-            track_index = int(params[0])
+            track, track_id = self._resolve_track(params[0])
             clip_index = int(params[1])
-            track = self.song.tracks[track_index]
             clips = track.arrangement_clips
 
             if clip_index >= len(clips):
@@ -202,8 +198,8 @@ class ArrangementHandler(AbletonOSCHandler):
                 time_span = clip.length
 
             clip.remove_notes_extended(from_pitch, pitch_span, from_time, time_span)
-            logger.info("Removed notes from arrangement clip %d on track %d" % (clip_index, track_index))
-            return (track_index, clip_index)
+            logger.info("Removed notes from arrangement clip %d on track %s" % (clip_index, track_id))
+            return (track_id, clip_index)
 
         self.osc_server.add_handler("/live/arrangement/create_midi_clip", create_midi_clip)
         self.osc_server.add_handler("/live/arrangement/duplicate_to_arrangement", duplicate_to_arrangement)

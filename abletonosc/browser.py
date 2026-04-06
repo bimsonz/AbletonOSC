@@ -362,11 +362,20 @@ class BrowserHandler(AbletonOSCHandler):
 
         def get_children(params: Tuple[Any]):
             """List children of a browser path.
-            /live/browser/get/children (category, [path_part1, ...])
-            Returns flat tuple of child names.
+            /live/browser/get/children (category, [path_part1, ...], [max_results])
+            Returns flat tuple of child names, limited to max_results (default 200).
+            Trailing integer param is treated as max_results.
             """
             category_name = str(params[0])
-            path_parts = [str(p) for p in params[1:]] if len(params) > 1 else []
+            max_results = 200
+            path_parts = []
+            for p in params[1:]:
+                try:
+                    # If it looks like an int and is at the end, treat as max_results
+                    val = int(p)
+                    max_results = val
+                except (ValueError, TypeError):
+                    path_parts.append(str(p))
 
             category = self._get_category(category_name)
             if not category:
@@ -382,6 +391,8 @@ class BrowserHandler(AbletonOSCHandler):
             names = []
             try:
                 for child in target.children:
+                    if len(names) >= max_results:
+                        break
                     try:
                         names.append(child.name)
                     except Exception:
@@ -397,10 +408,19 @@ class BrowserHandler(AbletonOSCHandler):
             results = []
 
             for cat_name in ["instruments", "drums", "audio_effects", "midi_effects",
-                             "sounds", "samples", "plugins", "max_for_live"]:
+                             "sounds", "samples", "plugins", "max_for_live", "user_library"]:
                 category = self._get_category(cat_name)
                 if category:
                     self._search_items(category, query, results, max_results=max_results, max_depth=4)
+
+            # Also search Places (user folders)
+            try:
+                for folder in self.browser.user_folders:
+                    if len(results) >= max_results:
+                        break
+                    self._search_items(folder, query, results, max_results=max_results, max_depth=4)
+            except Exception:
+                pass
 
             return tuple(results)
 

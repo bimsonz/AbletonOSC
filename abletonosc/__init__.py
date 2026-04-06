@@ -15,4 +15,5 @@ from .view import ViewHandler
 from .midimap import MidiMapHandler
 from .browser import BrowserHandler
 from .arrangement import ArrangementHandler
+from .chain import ChainHandler
 from .constants import OSC_LISTEN_PORT, OSC_RESPONSE_PORT

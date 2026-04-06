@@ -102,6 +102,7 @@ class Manager(ControlSurface):
                 abletonosc.MidiMapHandler(self),
                 abletonosc.BrowserHandler(self),
                 abletonosc.ArrangementHandler(self),
+                abletonosc.ChainHandler(self),
             ]
 
     def clear_api(self):
@@ -134,6 +135,7 @@ class Manager(ControlSurface):
             importlib.reload(abletonosc.view)
             importlib.reload(abletonosc.browser)
             importlib.reload(abletonosc.arrangement)
+            importlib.reload(abletonosc.chain)
             importlib.reload(abletonosc)
         except Exception as e:
             exc = traceback.format_exc()
