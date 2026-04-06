@@ -511,7 +511,9 @@ class BrowserHandler(AbletonOSCHandler):
 
             item = self._find_item(category, name)
             if not item:
-                raise ValueError("Not found in %s: %s" % (category_name, name))
+                item = self._find_item_with_fallback(name)
+            if not item:
+                raise ValueError("Not found in %s or user folders: %s" % (category_name, name))
 
             self.browser.preview_item(item)
             logger.info("Previewing: %s" % item.name)
@@ -548,7 +550,7 @@ class BrowserHandler(AbletonOSCHandler):
             name = str(params[0])
 
             for cat_name in ["instruments", "drums", "audio_effects", "midi_effects",
-                             "sounds", "plugins", "max_for_live", "user_library"]:
+                             "sounds", "samples", "plugins", "max_for_live", "user_library"]:
                 category = self._get_category(cat_name)
                 if category:
                     item = self._find_item(category, name)
@@ -556,6 +558,17 @@ class BrowserHandler(AbletonOSCHandler):
                         self.browser.load_item(item)
                         logger.info("Hotswap loaded: %s" % item.name)
                         return (item.name,)
+
+            # Fallback: search Places (user folders)
+            try:
+                for folder in self.browser.user_folders:
+                    item = self._find_item(folder, name)
+                    if item:
+                        self.browser.load_item(item)
+                        logger.info("Hotswap loaded '%s' from user folder" % item.name)
+                        return (item.name,)
+            except Exception:
+                pass
 
             raise ValueError("Not found for hotswap: %s" % name)
 
