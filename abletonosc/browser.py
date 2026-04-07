@@ -180,9 +180,9 @@ class BrowserHandler(AbletonOSCHandler):
             current = found
         return current
 
-    def _select_track(self, track_index):
-        """Select a track by index and return it."""
-        track = self.song.tracks[track_index]
+    def _select_track(self, track_param):
+        """Select a track by index, 'master', or 'return_N' and return it."""
+        track, _ = self._resolve_track(track_param)
         self.song.view.selected_track = track
         return track
 
