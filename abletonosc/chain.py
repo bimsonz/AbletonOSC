@@ -170,8 +170,9 @@ class ChainHandler(AbletonOSCHandler):
         # ---- Sidechain routing ----
 
         def sidechain_get_available(params: Tuple[Any]):
-            """List available sidechain input sources for a device.
+            """Get sidechain-related parameters and their available values.
             /live/chain/get/sidechain/available (track, device_index)
+            Returns (track_id, device_index, name, current_value, available_values, ...)
             """
             track, track_id = self._resolve_track(params[0])
             device_index = int(params[1])
@@ -179,18 +180,30 @@ class ChainHandler(AbletonOSCHandler):
             result = []
             try:
                 for p in device.parameters:
-                    if "sidechain" in p.name.lower() or "side-chain" in p.name.lower():
+                    name_lower = p.name.lower()
+                    if any(sc in name_lower for sc in ["s/c", "sidechain", "side-chain", "side chain"]):
                         if p.is_quantized:
+                            values = []
+                            for i in range(int(p.min), int(p.max) + 1):
+                                try:
+                                    values.append(p.str_for_value(i))
+                                except Exception:
+                                    values.append(str(i))
                             result.append(p.name)
-                            result.append(p.str_for_value(p.value))
-                            result.append(p.min)
-                            result.append(p.max)
+                            result.append(str(int(p.value)))
+                            result.append("|".join(values))
+                        else:
+                            result.append(p.name)
+                            result.append(str(p.value))
+                            result.append("")
             except Exception as e:
                 logger.warning("Error reading sidechain params: %s" % e)
-            return tuple(result) if result else ("no_sidechain",)
+            if not result:
+                return (track_id, device_index, "no_sidechain")
+            return (track_id, device_index, *result)
 
         def sidechain_set_routing(params: Tuple[Any]):
-            """Set sidechain routing for a device.
+            """Set a sidechain parameter by name and value.
             /live/chain/set/sidechain/routing (track, device_index, param_name, value)
             """
             track, track_id = self._resolve_track(params[0])
@@ -200,9 +213,19 @@ class ChainHandler(AbletonOSCHandler):
             value = params[3]
             for p in device.parameters:
                 if p.name.lower() == param_name.lower():
+                    if p.is_quantized:
+                        # Try matching by value string first
+                        for i in range(int(p.min), int(p.max) + 1):
+                            try:
+                                if p.str_for_value(i) == str(value):
+                                    p.value = float(i)
+                                    logger.info("Set sidechain %s = %s on device %d" % (param_name, value, device_index))
+                                    return (track_id, device_index, p.name, p.str_for_value(int(p.value)))
+                            except Exception:
+                                pass
                     p.value = float(value)
                     logger.info("Set sidechain %s = %s on device %d" % (param_name, value, device_index))
-                    return (track_id, device_index, param_name, p.value)
+                    return (track_id, device_index, p.name, str(p.value))
             raise ValueError("Sidechain parameter not found: %s" % param_name)
 
         self.osc_server.add_handler("/live/chain/get/sidechain/available", sidechain_get_available)
